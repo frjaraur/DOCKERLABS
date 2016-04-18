@@ -1,0 +1,71 @@
+
+NODENAME="docker-dtr"
+DOMAINNAME="labs.local"
+LAB_MGMT_IP="10.0.10.10"
+LAB_PUBLIC_IP="192.168.10.10"
+
+DOCKERHUB_USERNAME="username"
+DOCKERHUB_PASSWORD="userpassowrd"
+DOCKERHUB_EMAIL="useremail"
+
+Vagrant.configure(2) do |config|
+  config.vm.box = "centos/7"
+
+
+  config.vm.provider "virtualbox" do |vb|
+   vb.memory = "2048"
+  end
+
+  if Vagrant.has_plugin?("vagrant-timezone")
+    config.timezone.value = :host
+  end
+
+  config.vm.network "private_network",
+    ip: LAB_MGMT_IP,
+    netmask: "255.255.255.0",
+    virtualbox__intnet: "LAB_MGMT_NETWORK"
+
+  config.vm.hostname = NODENAME
+  config.hostsupdater.aliases = [NODENAME + "." + DOMAINNAME]
+
+  config.vm.network "private_network",
+    ip: LAB_PUBLIC_IP,
+    netmask: "255.255.255.0",
+    virtualbox__intnet: "LAB_PUBLIC_NETWORK"
+
+  config.vm.network "public_network",
+    bridge: "wlan0",
+    use_dhcp_assigned_default_route: true
+
+  config.vm.network "forwarded_port", guest: 443, host: 8443
+
+
+
+  # config.vm.provision "fix-no-tty", type: "shell" do |s|
+  #       s.privileged = false
+  #       s.inline = "sudo sed -i '/tty/!s/mesg n/tty -s \\&\\& mesg n/' /root/.profile"
+  # end
+
+
+
+  config.vm.provision "shell", inline: <<-SHELL
+    sudo yum install -y yum-utils
+    sudo rpm --import "https://sks-keyservers.net/pks/lookup?op=get&search=0xee6d536cf7dc86e2d7d56f59a178ac6c6238f52e"
+    sudo yum-config-manager --add-repo https://packages.docker.com/1.10/yum/repo/main/centos/7 -y
+    sudo yum install -y docker-engine
+    sudo systemctl enable docker.service
+    sudo systemctl start docker.service
+  SHELL
+
+  # config.vm.provision "shell", inline: <<-SHELL
+  #   sudo useradd -m -g docker docker
+  # SHELL
+
+  config.vm.provision "shell", inline: <<-SHELL
+    sudo docker login -u #{ENV['DOCKERHUB_USERNAME']} -p #{ENV['DOCKERHUB_PASSWORD']} -e #{ENV['DOCKERHUB_EMAIL']}
+    sudo bash -c "$(sudo docker run docker/trusted-registry install)"
+  SHELL
+  #config.hostsupdater.resume_on_suspend = false
+
+
+end
